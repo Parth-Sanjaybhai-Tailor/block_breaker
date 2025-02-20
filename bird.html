@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breakout Game</title>
+    <style>
+        body {
+            margin: 0;
+            background: #333;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            margin: 20px auto;
+            background: #222;
+            border: 2px solid #444;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            margin-top: 20px;
+            font-size: 2rem;
+            text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #ff00ff, 0 0 40px #ff00ff;
+        }
+        .level-display {
+            margin-top: 10px;
+            font-size: 1.2rem;
+            text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+        }
+        .level-complete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #00ffff, 0 0 30px #00ffff;
+            display: none;
+        }
+        .level-complete button {
+            background: linear-gradient(90deg, #ff00ff, #00ffff);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .level-complete button:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>Breakout Game</h1>
+    <div class="level-display" id="levelDisplay">Level: 1</div>
+    <canvas id="gameCanvas" width="480" height="320"></canvas>
+    <div class="level-complete" id="levelComplete">
+        <h2>Level Complete!</h2>
+        <button id="nextLevelButton">Next Level</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelCompleteDiv = document.getElementById('levelComplete');
+        const nextLevelButton = document.getElementById('nextLevelButton');
+        const levelDisplay = document.getElementById('levelDisplay');
+
+        // Game variables
+        let currentLevel = 1;
+        const maxLevels = 10;
+        let gameRunning = true;
+        let isPaused = false;
+
+        // Ball properties
+        const ballRadius = 10;
+        let x = canvas.width / 2;
+        let y = canvas.height - 30;
+        let dx = 2;
+        let dy = -2;
+
+        // Striker (paddle) properties
+        const paddleHeight = 10;
+        const paddleWidth = 75;
+        let paddleX = (canvas.width - paddleWidth) / 2;
+
+        // Bricks properties
+        const brickRowCount = 5;
+        let brickColumnCount = 3 + currentLevel; // Increase bricks per level
+        let brickWidth = 75;
+        let brickHeight = 20;
+        const brickPadding = 10;
+        const brickOffsetTop = 30;
+        const brickOffsetLeft = 30;
+
+        let bricks = [];
+        let brickColors = [
+            ['#ff00ff', '#ff4500'], // Neon Pink to Orange
+            ['#00ffff', '#00ff00'], // Cyan to Green
+            ['#ff00ff', '#ffff00'], // Neon Pink to Yellow
+            ['#00ffff', '#ff69b4'], // Cyan to Hot Pink
+            ['#ff00ff', '#00bfff'], // Neon Pink to Deep Sky Blue
+            ['#00ffff', '#ff1493'], // Cyan to Deep Pink
+            ['#ff00ff', '#00fa9a'], // Neon Pink to Medium Spring Green
+            ['#00ffff', '#ffd700'], // Cyan to Gold
+            ['#ff00ff', '#7cfc00'], // Neon Pink to Lawn Green
+            ['#00ffff', '#ff4500']  // Cyan to Orange Red
+        ];
+
+        function createBricks() {
+            bricks = [];
+            for (let c = 0; c < brickColumnCount; c++) {
+                bricks[c] = [];
+                for (let r = 0; r < brickRowCount; r++) {
+                    bricks[c][r] = { x: 0, y: 0, status: 1 };
+                }
+            }
+        }
+
+        // Mouse controls
+        canvas.addEventListener("mousemove", mouseMoveHandler);
+
+        // Pause with space bar
+        document.addEventListener("keydown", (e) => {
+            if (e.code === "Space") {
+                isPaused = !isPaused;
+                if (isPaused) {
+                    cancelAnimationFrame(draw);
+                } else {
+                    requestAnimationFrame(draw);
+                }
+            }
+        });
+
+        function mouseMoveHandler(e) {
+            let relativeX = e.clientX - canvas.offsetLeft;
+            if (relativeX > paddleWidth / 2 && relativeX < canvas.width - paddleWidth / 2) {
+                paddleX = relativeX - paddleWidth / 2;
+            }
+        }
+
+        // Collision detection
+        function collisionDetection() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    let b = bricks[c][r];
+                    if (b.status === 1) {
+                        if (
+                            x > b.x &&
+                            x < b.x + brickWidth &&
+                            y > b.y &&
+                            y < b.y + brickHeight
+                        ) {
+                            dy = -dy;
+                            b.status = 0; // Brick is hit, so it disappears
+                        }
+                    }
+                }
+            }
+        }
+
+        // Draw functions
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#ff00ff";
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#00ffff";
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawBricks() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    if (bricks[c][r].status === 1) {
+                        let brickX = r * (brickWidth + brickPadding) + brickOffsetLeft;
+                        let brickY = c * (brickHeight + brickPadding) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+
+                        // Gradient colors for bricks
+                        let gradient = ctx.createLinearGradient(brickX, brickY, brickX + brickWidth, brickY + brickHeight);
+                        gradient.addColorStop(0, brickColors[currentLevel - 1][0]);
+                        gradient.addColorStop(1, brickColors[currentLevel - 1][1]);
+
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        ctx.fillStyle = gradient;
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = "#ff00ff";
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            if (!gameRunning || isPaused) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            collisionDetection();
+
+            // Ball movement and collision with walls
+            if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) {
+                dx = -dx;
+            }
+            if (y + dy < ballRadius) {
+                dy = -dy;
+            } else if (y + dy > canvas.height - ballRadius) {
+                if (x > paddleX && x < paddleX + paddleWidth) {
+                    dy = -dy;
+                } else {
+                    gameRunning = false; // Stop the game when the ball hits the bottom
+                    setTimeout(() => {
+                        if (confirm("Game Over! Do you want to restart this level?")) {
+                            resetGame();
+                        } else {
+                            document.location.reload();
+                        }
+                    }, 100);
+                }
+            }
+
+            // Check if all bricks are broken
+            let allBricksBroken = true;
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    if (bricks[c][r].status === 1) {
+                        allBricksBroken = false;
+                        break;
+                    }
+                }
+            }
+
+            if (allBricksBroken) {
+                levelComplete();
+            }
+
+            x += dx;
+            y += dy;
+            requestAnimationFrame(draw);
+        }
+
+        function levelComplete() {
+            gameRunning = false; // Stop the game when level is complete
+            levelCompleteDiv.style.display = "block";
+
+            nextLevelButton.onclick = () => {
+                if (currentLevel < maxLevels) {
+                    currentLevel++;
+                    resetGame();
+                    levelCompleteDiv.style.display = "none";
+                } else {
+                    alert("Congratulations! You've completed all levels!");
+                    document.location.reload();
+                }
+            };
+        }
+
+        function resetGame() {
+            gameRunning = true; // Resume the game
+            isPaused = false;
+            x = canvas.width / 2;
+            y = canvas.height - 30;
+
+            // Randomize ball trajectory
+            dx = (Math.random() > 0.5 ? 1 : -1) * (2 + currentLevel * 0.5);
+            dy = -(2 + currentLevel * 0.5);
+
+            paddleX = (canvas.width - paddleWidth) / 2;
+
+            // Decrease brick size and increase number of bricks
+            brickWidth = 75 - currentLevel * 5;
+            brickHeight = 20 - currentLevel * 2;
+            brickColumnCount = 3 + currentLevel;
+
+            createBricks();
+            levelDisplay.textContent = `Level: ${currentLevel}`;
+            draw();
+        }
+
+        createBricks();
+        levelDisplay.textContent = `Level: ${currentLevel}`;
+        draw();
+    </script>
+</body>
+</html>
